@@ -94,6 +94,15 @@ held only in page memory for the life of the tab, never persisted.
 Chrome / Edge / Brave / Opera on **Chromium 111+** (the capture script relies on
 static MAIN-world content scripts, added in 111). Manifest V3.
 
+## Credits
+
+This project modernizes the original
+[BMW MyGarage Chrome Trick](https://chromewebstore.google.com/detail/bmw-mygarage-chrome-trick/lbhlbodakahplgnfbggcjajoeodfpfon)
+Chrome extension by **fdfranklin06** (Chrome Web Store, 2022) — the idea of
+surfacing MyGarage's hidden production data is theirs. The bundled MIT license
+credits **Lawrence Lagerlof** (2021), whose earlier work the original extension
+appears to build on; that notice is preserved unchanged in [LICENSE](LICENSE).
+
 ## Disclaimer
 
 Unofficial hobby project — not affiliated with or endorsed by BMW. It reads the

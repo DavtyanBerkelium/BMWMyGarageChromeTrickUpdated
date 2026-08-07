@@ -1,98 +1,107 @@
 # BMW MyGarage Chrome Trick
 
-**See everything BMW knows about your on-order car — right on the MyGarage page.**
+**See everything BMW knows about your on-order car — status codes, build data,
+and your full option list — right on the MyGarage page.**
 
-If you've ever ordered a BMW, you know the ritual: refresh MyGarage, see "Order
-received," and wonder what's *actually* happening. The answer is already in your
-browser — BMW's own page downloads the full production record (status codes, dates,
-the complete build sheet) and then shows you almost none of it. Enthusiasts dig it
-out by hand with DevTools; this extension does it in one click.
+If you're waiting on a build, you know the routine: refresh MyGarage, read
+"Order received" for the 40th time, then head to the forums to decode what's
+*really* happening. Maybe you've even tried the F12 trick from the order-tracking
+threads — digging through DevTools for the hidden response with your status code
+and options. This extension does all of that for you. One click, right on the
+page:
 
 ![The Additional Vehicle Details panel showing a 2027 M3 order at status 112: decoded status with plain-language note, next milestone, VIN/date placeholders with explainer, model and color codes, and the priced option packages](docs/panel.png)
 
-*An actual render (status 112 order) — every line above is data BMW's page downloaded but never displayed.*
+*A real example (order at status 112) — every line is data BMW's page already
+downloaded but never shows you.*
 
-## Features
+## What you'll see
 
-**Order tracking**
-- The raw **factory status code** with its technical name (102, 111, 112, 150 …)
-  plus a plain-language note at the milestones that matter — 112 is flagged as your
-  *last chance to change the order*, 150 as *spec locked*.
-- **Next** — the upcoming production step, from a curated milestone ladder.
-- **VIN, production date, and retail date** the moment BMW assigns them — with a
-  short explainer while they're still hidden (BMW's customer API withholds them
-  until status 150; your dealer or the BMW Genius line can quote the scheduled
-  build week earlier).
-
-**Build sheet**
-- Model with chassis code, exterior and interior with **decoded paint/upholstery
-  codes** (`P0S0N → S0N`).
-- Every **option package with its contents and MSRP** as priced in BMW's own feed,
-  package breakdowns folded into their parent, plus the full standard-features list.
-- **Copy details** exports the panel as clean plain text — ready for your order
+- **The real factory status code** (102, 111, 112, 150 …) with its meaning in
+  plain English — including the ones that matter: **112 = your last chance to
+  change the order**, **150 = spec locked, production started**.
+- **What's next** — the upcoming step in the production chain.
+- **VIN and production date** the moment BMW assigns them (that happens at
+  status 150). Until then, a short note explains why they're hidden — and that
+  your dealer or the **BMW Genius line (1-844-443-6487)** can quote your
+  scheduled build week early, reliably once you hit 112.
+- **Your full build sheet** — every option package with its price and contents,
+  the complete standard-features list, and your paint/interior with the short
+  factory codes (the ones on the dealer's Vehicle Inquiry Report).
+- **A 360° spin of your exact build** — BMW renders your actual configuration
+  from every angle; the View 360° button turns that into a drag-to-rotate viewer.
+- **Copy details** — one click, then paste your build straight into your order
   thread.
 
-**Eye candy**
-- **View 360°** — BMW renders a full turntable of *your exact build* for its
-  configurator plumbing. One click loads all 36 frames into a drag-to-rotate viewer.
+## Install (about 2 minutes, nothing technical)
 
-## Install
+1. Click the green **Code** button at the top of this page → **Download ZIP**,
+   then unzip it somewhere you won't delete. *(If you use git: just clone.)*
+2. Type `chrome://extensions` in Chrome's address bar and press Enter.
+3. Turn on **Developer mode** (toggle, top-right corner).
+4. Click **Load unpacked** and pick the unzipped folder.
+5. Pin the icon: puzzle-piece menu (top right of Chrome) → pin.
 
-1. `git clone` this repo (or download it) — the repo *is* the unpacked extension.
-2. Open `chrome://extensions/`, toggle **Developer mode** (top right).
-3. Click **Load unpacked** and select the cloned folder.
-4. Pin the icon to your toolbar (puzzle-piece menu → pin).
+Works on Chrome, Edge, Brave, and Opera — any version from 2023 or newer.
 
-## Use
+## Using it
 
 1. Sign in at [mygarage.bmwusa.com](https://mygarage.bmwusa.com/dashboard.html).
-2. Click your vehicle in the top thumbnail bar.
-3. Click the extension icon. That's it — click again after switching vehicles, or
-   to refresh.
+2. Click your car in the top thumbnail bar.
+3. Click the extension's icon. That's it. Click it again to refresh, or after
+   switching cars.
 
-If BMW's page hasn't loaded the data yet, the extension fetches it directly using
-the same authorized call the page itself makes.
+## Common questions
 
-## How it works
+**Is this safe? Where does my data go?**
+Nowhere. There's no server, no account, no tracking — the extension only reads
+the data BMW's own page already loaded into *your* browser, and the only place
+it ever talks to is BMW itself. It can't even see other websites: its access is
+locked to `mygarage.bmwusa.com` and nothing else. All the code is right here in
+this repo if you want to check.
 
-The extension never talks to anything except BMW. A capture script watches the
-API responses BMW's own frontend already fetches and indexes them; the panel just
-renders what was captured.
+**Do I give it my BMW password?**
+No. You log into MyGarage like you always do. The extension never sees or asks
+for credentials.
+
+**Why does it say "No VIN assigned yet"?**
+BMW's system only reveals the VIN and production date once your car physically
+enters production (status 150). Before that they exist only in dealer systems —
+ask your dealer or call the Genius line for your build week.
+
+**My status hasn't moved in weeks — is it broken?**
+Probably not: early statuses (102, 111) genuinely sit for weeks, and BMW's
+tracker can lag the factory by a day or two. The panel shows exactly what BMW's
+system reports, no more and no less.
+
+**Will this break when BMW updates their site?**
+It might — it reads BMW's internal data, and BMW can reshape it whenever they
+like. If something looks off, check back here for an update.
+
+<details>
+<summary><strong>For the technically curious — how it works & tests</strong></summary>
+
+The extension never talks to anything except BMW. A small script watches the API
+responses BMW's frontend already fetches and indexes them; clicking the icon
+renders what was captured (or re-fetches it with the page's own session token if
+BMW hasn't loaded it yet — replayed only to the BMW origin, held only in page
+memory, never stored).
 
 | File | Role |
 |---|---|
-| `manifest.json` | MV3 manifest, locked to `mygarage.bmwusa.com` only |
+| `manifest.json` | MV3 manifest, locked to `mygarage.bmwusa.com`; permissions: `scripting` only |
 | `before.js` | Runs at `document_start` in the page's MAIN world; hooks `fetch`/`XHR` and indexes every `prodVehicleDetails` response by production number |
-| `execute.js` | Runs on toolbar click; reads the selected vehicle, renders the panel (fetching via BMW's forward proxy if nothing was captured yet) |
+| `execute.js` | Runs on toolbar click; reads the selected vehicle and renders the panel |
 | `background.js` | Service worker; injects `execute.js` on click |
 
-After editing code: hit the reload arrow on `chrome://extensions/`, then reload the
-BMW tab.
+Requires Chromium 111+ (static MAIN-world content scripts). After editing code:
+reload the extension on `chrome://extensions/`, then reload the BMW tab.
 
-## Tests
+Zero-dependency test suite (Node 20+): `npm test` — 44 tests covering the
+capture hooks, panel rendering (including payload shapes taken from live
+captures), and manifest invariants.
 
-Zero-dependency suite (Node 20+, no packages to install):
-
-```bash
-npm test
-```
-
-Covers the capture hooks, panel rendering (including XSS escaping and BMW's odd
-payload shapes, all taken from live captures), and manifest invariants.
-
-## Permissions & privacy
-
-- `host_permissions`: `https://mygarage.bmwusa.com/*` — the only site it can touch.
-- `scripting` — to inject the panel on click. That's the entire permission list.
-
-Nothing leaves your browser. To fetch details on demand, the extension reuses the
-`Authorization` token the page already sends — replayed only to the BMW origin,
-held only in page memory for the life of the tab, never persisted.
-
-## Compatibility
-
-Chrome / Edge / Brave / Opera on **Chromium 111+** (the capture script relies on
-static MAIN-world content scripts, added in 111). Manifest V3.
+</details>
 
 ## Credits
 

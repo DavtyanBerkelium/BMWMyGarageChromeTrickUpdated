@@ -21,10 +21,12 @@ downloaded but never shows you.*
   plain English — including the ones that matter: **112 = your last chance to
   change the order**, **150 = spec locked, production started**.
 - **What's next** — the upcoming step in the production chain.
-- **VIN and production date** the moment BMW assigns them (that happens at
-  status 150). Until then, a short note explains why they're hidden — and that
-  your dealer or the **BMW Genius line (1-844-443-6487)** can quote your
-  scheduled build week early, reliably once you hit 112.
+- **VIN** as soon as BMW assigns it (at status 150). Meanwhile your dealer or the
+  **BMW Genius line (1-844-443-6487)** can quote your scheduled build week early —
+  reliably once you hit status 112.
+- **View BMW brochure** — once your VIN exists, a one-click link to BMW's own
+  official per-VIN digital brochure: a full spec sheet and image gallery of your
+  exact build.
 - **Your full build sheet** — every option package with its price and contents,
   the complete standard-features list, and your paint/interior with the short
   factory codes (the ones on the dealer's Vehicle Inquiry Report).
@@ -65,9 +67,9 @@ No. You log into MyGarage like you always do. The extension never sees or asks
 for credentials.
 
 **Why does it say "No VIN assigned yet"?**
-BMW's system only reveals the VIN and production date once your car physically
-enters production (status 150). Before that they exist only in dealer systems —
-ask your dealer or call the Genius line for your build week.
+BMW reveals the VIN once your car physically enters production (status 150).
+Before that it exists only in dealer systems — ask your dealer or call the Genius
+line for your build week.
 
 **My status hasn't moved in weeks — is it broken?**
 Probably not: early statuses (102, 111) genuinely sit for weeks, and BMW's

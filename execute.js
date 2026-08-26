@@ -65,12 +65,6 @@
   // (0/100/101/105/191) are deliberately off this path.
   const STATUS_LADDER = ['102', '111', '112', '150', '151', '152', '153', '155', '160', '168', '180', '182', '190', '193', '194', '195', '196'];
 
-  // Why the date is missing pre-150: BMW schedules the build week earlier (it's
-  // visible in dealer systems from status 112), but the customer-facing API only
-  // publishes prodDate once production physically starts at 150, alongside the
-  // VIN. Verified live on this feed; corroborated across owner forums.
-  const PROD_DATE_NOTE = 'BMW schedules your build week earlier, but its customer API only reveals the date once production physically starts (status 150, when the VIN is also assigned). Until then the scheduled week exists only in BMW’s internal systems — your dealer or the BMW Genius line (1-844-443-6487) can quote it.';
-
   const cap = globalThis.__bmwCapture;
   if (!cap) {
     alert('BMW MyGarage Trick: capture script not loaded. Make sure you are on https://mygarage.bmwusa.com and reload the page.');
@@ -168,16 +162,15 @@
     const statusDesc = escapeHtml(detail.overHeadMessage || '');
     const statusDescLong = escapeHtml(detail.overHeadLongMessage || '');
     // Keep raw + escaped versions: escaped feeds the panel, raw feeds the clipboard export.
-    const vinRaw = detail.vin && detail.vin !== 'NA' && detail.vin.length > 4
-      ? detail.vin : 'No VIN assigned yet (status 150 required)';
-    const prodDateUnset = !(detail.prodDate && detail.prodDate.length > 4);
-    const prodRaw = prodDateUnset
-      ? 'No production date assigned yet (status 150 required)' : detail.prodDate;
-    const retlRaw = detail.retlDate && detail.retlDate.length > 4
-      ? detail.retlDate : 'Not yet scheduled';
+    const vinIsReal = !!(detail.vin && detail.vin !== 'NA' && detail.vin !== 'null' && detail.vin.length > 4);
+    const vinRaw = vinIsReal ? detail.vin : 'No VIN assigned yet (status 150 required)';
+    // BMW's official per-VIN digital brochure (public, no login) — a full spec
+    // sheet + gallery of the exact build. Only meaningful once a real VIN exists.
+    const brochureUrl = vinIsReal ? 'https://eve.vsr.aws.bmw.cloud/brochure/' + encodeURIComponent(detail.vin) : '';
+    // Production Date and Retail Date rows are hidden for now: BMW's feed doesn't
+    // reliably populate prodDate/retlDate at a status we've pinned down (both were
+    // still "null" at 150), so they're suppressed until the real reveal is known.
     const vinShown = escapeHtml(vinRaw);
-    const prodDate = escapeHtml(prodRaw);
-    const retlDate = escapeHtml(retlRaw);
     const exterior = escapeHtml(detail.exteriorColor || '');
     const interior = escapeHtml(detail.interiorColor || '');
     const modelYear = escapeHtml(detail.modelYear || '');
@@ -273,8 +266,6 @@
       'Status ' + (detail.orderStatusCode || 'N/A') + (currentStatusName ? ' — ' + currentStatusName : ''),
       nextName ? 'Next: ' + nextName : '',
       'VIN: ' + vinRaw,
-      'Production Date: ' + prodRaw,
-      'Retail Date: ' + retlRaw,
       detail.exteriorColor ? 'Exterior: ' + detail.exteriorColor + (colorCodeRaw ? ' (' + colorCodeRaw + ')' : '') : '',
       detail.interiorColor ? 'Interior: ' + detail.interiorColor + (upholsteryCodeRaw ? ' (' + upholsteryCodeRaw + ')' : '') : ''
     ].filter(Boolean).join('\n');
@@ -293,12 +284,10 @@
         '</div>' +
         '<div class="c-cd-spin-box" style="display:none;margin:0 0 16px 0;"></div>' +
         '<p style="margin:6px 0;"><strong>Status Code:</strong> ' + status + (currentStatusName ? ' <span style="color:#444;">&mdash; ' + escapeHtml(currentStatusName) + (statusNote ? ': ' + escapeHtml(statusNote) : '') + '</span>' : '') + '</p>' +
-        (nextName ? '<p style="margin:6px 0;"><strong>Next:</strong> ' + escapeHtml(nextName) + '</p>' : '') +
         '<p style="margin:6px 0;"><strong>Status:</strong> ' + statusDesc + (statusDescLong ? '<br><span style="color:#555;">' + statusDescLong + '</span>' : '') + '</p>' +
-        '<p style="margin:6px 0;"><strong>VIN:</strong> ' + vinShown + '</p>' +
-        '<p style="margin:6px 0;"><strong>Production Date:</strong> ' + prodDate + '</p>' +
-        (prodDateUnset ? '<p style="margin:6px 0 6px 0;font-size:.85rem;color:#777;font-style:italic;">' + escapeHtml(PROD_DATE_NOTE) + '</p>' : '') +
-        '<p style="margin:6px 0;"><strong>Retail Date:</strong> ' + retlDate + '</p>' +
+        (nextName ? '<p style="margin:6px 0;"><strong>Next:</strong> ' + escapeHtml(nextName) + '</p>' : '') +
+        '<p style="margin:6px 0;"><strong>VIN:</strong> ' + vinShown +
+          (brochureUrl ? ' <a href="' + escapeHtml(brochureUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">View BMW brochure ↗</a>' : '') + '</p>' +
         (modelYear || naModel ? '<p style="margin:6px 0;"><strong>Model:</strong> ' + modelYear + ' ' + naModel + modelCodes + '</p>' : '') +
         (exterior ? '<p style="margin:6px 0;"><strong>Exterior:</strong> ' + exterior + (colorCode ? ' <span style="color:#666;">(' + colorCode + ')</span>' : '') + '</p>' : '') +
         (interior ? '<p style="margin:6px 0;"><strong>Interior:</strong> ' + interior + (upholsteryCode ? ' <span style="color:#666;">(' + upholsteryCode + ')</span>' : '') + '</p>' : '') +

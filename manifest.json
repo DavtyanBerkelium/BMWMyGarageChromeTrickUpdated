@@ -1,7 +1,7 @@
 {
   "name": "BMW MyGarage Chrome Trick",
   "description": "Exposes hidden production status, VIN, dates, and options on BMW MyGarage.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "manifest_version": 3,
   "minimum_chrome_version": "111",
   "action": {

@@ -6,10 +6,12 @@ so it has no VIN, no production date, and no shipping data to build or verify ag
 
 ## Once a tracked car has a VIN (status ≥ 150)
 
-- **Deep-link buttons to external VIN tools** (Tier-2 #19). Add buttons on the panel
-  that open the VIN in free window-sticker / VIN-decoder / ship-tracking web tools,
-  shown only once `detail.vin` is a real VIN (not the `"null"` sentinel). Needs a real
-  VIN to confirm those tools accept the BMW VIN format and deep-link correctly.
+- ~~**Deep-link to a VIN tool**~~ — DONE (2026-08-26): the VIN row links to BMW's own
+  official per-VIN brochure (`https://eve.vsr.aws.bmw.cloud/brochure/<VIN>`, public, no
+  login), gated on a real VIN. Verified live against the user's car.
+- **Ship-tracking link** (deferred sub-item of the above). Hold until the car reaches a
+  shipping status (~194/195) — and at that point also diff the TRACK payload for any new
+  vessel/port fields, since BMW's feed grows new fields as the order matures.
 
 ## Needs a live data sample to build correctly
 

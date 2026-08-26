@@ -76,6 +76,19 @@ test('shows VIN placeholder when no VIN assigned', () => {
   assert.match(target.injected[0].html, /No VIN assigned yet/);
 });
 
+test('links to BMW\'s per-VIN brochure once a real VIN exists', () => {
+  const html = renderWith(BASE_DETAIL).target.injected[0].html; // vin WBS11111111111111
+  assert.match(html, /href="https:\/\/eve\.vsr\.aws\.bmw\.cloud\/brochure\/WBS11111111111111"/);
+  assert.match(html, /target="_blank" rel="noopener noreferrer"[^>]*>View BMW brochure/);
+});
+
+test('no brochure link while the VIN is unassigned (null / NA / short sentinels)', () => {
+  for (const vin of ['null', 'NA', 'na', '']) {
+    const html = renderWith(Object.assign({}, BASE_DETAIL, { vin })).target.injected[0].html;
+    assert.doesNotMatch(html, /brochure/, `vin="${vin}" must not produce a brochure link`);
+  }
+});
+
 test('treats the literal string "null" (real pre-production API sentinel) as unset', () => {
   // Verified live: a status-102 TRACK car returns vin/prodDate/retlDate as the
   // string "null" (not absent, not "NA"). The length>4 guard must treat these as unset.
@@ -86,21 +99,16 @@ test('treats the literal string "null" (real pre-production API sentinel) as uns
   const { target } = renderWith(preProd);
   const html = target.injected[0].html;
   assert.match(html, /No VIN assigned yet/);
-  assert.match(html, /No production date assigned yet/);
-  assert.match(html, /Not yet scheduled/);
   assert.match(html, /Special Order \(no Prod Week\)/, 'status 102 name should resolve');
   assert.doesNotMatch(html, /VIN:<\/strong>\s*null/, 'must never render the literal "null" as a VIN');
 });
 
-test('explains why the production date is hidden pre-150; note gone once a real date exists', () => {
-  const pre = Object.assign({}, BASE_DETAIL, { orderStatusCode: '112', prodDate: 'null' });
-  const preHtml = renderWith(pre).target.injected[0].html;
-  assert.match(preHtml, /customer API only reveals the date once production physically starts/i);
-  assert.match(preHtml, /dealer or the BMW Genius line \(1-844-443-6487\) can quote it/i);
-  const at150 = Object.assign({}, BASE_DETAIL, { orderStatusCode: '150', prodDate: '2026-09-04' });
-  const postHtml = renderWith(at150).target.injected[0].html;
-  assert.doesNotMatch(postHtml, /customer API only reveals/i, 'disclaimer disappears with a real date');
-  assert.match(postHtml, /Production Date:<\/strong> 2026-09-04/, 'real date renders');
+test('production and retail date rows are hidden entirely — even when BMW provides real values', () => {
+  const unsetHtml = renderWith(Object.assign({}, BASE_DETAIL, { prodDate: 'null', retlDate: 'null' })).target.injected[0].html;
+  assert.doesNotMatch(unsetHtml, /Production Date|Retail Date/, 'no date rows when unset');
+  // Suppressed until the real reveal trigger is known — populated dates stay hidden too.
+  const withDatesHtml = renderWith(Object.assign({}, BASE_DETAIL, { prodDate: '2026-09-04', retlDate: '2026-10-15' })).target.injected[0].html;
+  assert.doesNotMatch(withDatesHtml, /Production Date|Retail Date|2026-09-04|2026-10-15/, 'real dates are not shown while the rows are suppressed');
 });
 
 test('resolves chassis from agModelCode via garage-vehicles', () => {

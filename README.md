@@ -10,10 +10,10 @@ threads — digging through DevTools for the hidden response with your status co
 and options. This extension does all of that for you. One click, right on the
 page:
 
-![The Additional Vehicle Details panel showing a 2027 M3 order at status 112: decoded status with plain-language note, next milestone, VIN/date placeholders with explainer, model and color codes, and the priced option packages](docs/panel.png)
+![The Additional Vehicle Details panel for a 2027 M3 order at status 150: decoded status with a plain-language note, the current status message, the next milestone, the VIN with a link to BMW's official brochure, model and color codes with decoded paint/upholstery, and the priced option packages with the Carbon Package contents folded in](docs/panel.png)
 
-*A real example (order at status 112) — every line is data BMW's page already
-downloaded but never shows you.*
+*A real example (order at status 150 — production started) — every line is data
+BMW's page already downloaded but never shows you.*
 
 ## What you'll see
 
@@ -99,7 +99,7 @@ memory, never stored).
 Requires Chromium 111+ (static MAIN-world content scripts). After editing code:
 reload the extension on `chrome://extensions/`, then reload the BMW tab.
 
-Zero-dependency test suite (Node 20+): `npm test` — 44 tests covering the
+Zero-dependency test suite (Node 20+): `npm test` — 46 tests covering the
 capture hooks, panel rendering (including payload shapes taken from live
 captures), and manifest invariants.
 

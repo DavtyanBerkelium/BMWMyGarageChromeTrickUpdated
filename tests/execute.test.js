@@ -208,13 +208,62 @@ test('renders package prices only for real packages (live 2026-08 payload shape)
   assert.match(html, /Carbon Package \(5\) <span[^>]*>&mdash; \$14,300<\/span><\/summary>/, 'content folds into the parent: 2 own + 3 content items, parent price kept');
   assert.doesNotMatch(html, /Carbon Package Content/, 'the Content breakdown no longer renders as its own section');
   assert.match(html, /M Alcantara steering wheel<\/li><li[^>]*>Carbon Fiber trim/, 'parent items come first, content items follow');
-  assert.match(html, /Added options \(2\)<\/summary>/, '-1 sentinel shows no price');
-  assert.match(html, /Standard Features \(1\)<\/summary>/, '-2 sentinel shows no price');
+  assert.match(html, /Added options \(1\)<\/summary>/, '-1 sentinel shows no price (Destination Charge re-filed to Standard)');
+  assert.match(html, /Standard Features \(2\)<\/summary>/, '-2 sentinel shows no price (+re-filed Destination Charge)');
   assert.match(html, /M Driver&quot;s Package/, 'literal double quote in BMW data is escaped, not broken');
   assert.match(html, /<details open[^>]*>\s*<summary[^>]*>Added options/, 'Added options stays open in the multi-package shape');
   // The fold must be a pure transform — the cached detail object stays untouched.
   assert.strictEqual(livePkgs.packageDetails.length, 4, 'original package array not mutated');
   assert.strictEqual(livePkgs.packageDetails[0].options.length, 2, 'parent package options not mutated');
+});
+
+test('re-files BMW-mis-filed options in both directions (verified live shapes)', () => {
+  // Verified live at status 150: BMW lists "Extended Shadowline Trim Deletion"
+  // (an ordered option) under Standard Features, and "Destination Charge"
+  // (a mandatory fee) under Added options.
+  const d = Object.assign({}, BASE_DETAIL, {
+    packageDetails: [
+      { packageName: 'Added options', price: -1, options: ['Destination Charge', 'Sepia III Metallic'] },
+      { packageName: 'Standard Features', price: -2, options: ['Extended Shadowline Trim', 'Extended Shadowline Trim Deletion', 'Tire pressure monitor'] },
+    ],
+  });
+  const html = renderWith(d).target.injected[0].html;
+  assert.match(html, /Added options \(2\)<\/summary>/, 'added: -DestCharge +Deletion = 2');
+  assert.match(html, /Standard Features \(3\)<\/summary>/, 'standard: -Deletion +DestCharge = 3');
+  const iDel = html.indexOf('Extended Shadowline Trim Deletion');
+  const iCharge = html.indexOf('Destination Charge');
+  const iStd = html.indexOf('Standard Features (3)');
+  assert.ok(iDel !== -1 && iDel < iStd, 'the deletion renders inside Added options (before the Standard section)');
+  assert.ok(iCharge !== -1 && iCharge > iStd, 'Destination Charge renders inside Standard Features (after its summary)');
+  assert.match(html, /Extended Shadowline Trim<\/li>/, 'the plain trim line stays in Standard');
+  assert.strictEqual(d.packageDetails[1].options.length, 3, 'cached standard options are not mutated');
+  assert.strictEqual(d.packageDetails[0].options.length, 2, 'cached added options are not mutated');
+});
+
+test('re-files Head-up Display out of the folded Carbon content into Executive Package', () => {
+  const d = Object.assign({}, BASE_DETAIL, {
+    packageDetails: [
+      { packageName: 'Carbon Package', price: 14300, options: ['826M Wheels', 'M Alcantara steering wheel'] },
+      { packageName: 'Carbon Package Content', price: 0, options: ['Carbon Fiber trim', 'Head-up Display', 'M Carbon Bucket Seats'] },
+      { packageName: 'Executive Package', price: 1100, options: ['Full LED Headlights with Cornering Lights', 'Galvanic controls'] },
+    ],
+  });
+  const html = renderWith(d).target.injected[0].html;
+  assert.match(html, /Carbon Package \(4\)/, 'folded 2+3, minus HUD = 4');
+  assert.match(html, /Executive Package \(3\)/, '2 + HUD = 3, matching BMW\'s configurator');
+  const iHud = html.indexOf('Head-up Display');
+  const iExec = html.indexOf('Executive Package (3)');
+  assert.ok(iHud !== -1 && iHud > iExec, 'HUD renders inside the Executive section');
+});
+
+test('re-file is a no-op when there is no Added options section to move into', () => {
+  const d = Object.assign({}, BASE_DETAIL, {
+    packageDetails: [
+      { packageName: 'Standard Features', price: -2, options: ['Extended Shadowline Trim Deletion'] },
+    ],
+  });
+  const html = renderWith(d).target.injected[0].html;
+  assert.match(html, /Standard Features \(1\)<\/summary>/, 'stays put without a destination section');
 });
 
 test('a "... Content" section with no matching parent still renders standalone', () => {

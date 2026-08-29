@@ -237,6 +237,53 @@
         packages.push(pkg);
       }
     });
+
+    // Re-file options BMW's feed puts in the wrong section (each verified live
+    // at status 150, cross-checked against BMW's configurator):
+    //  - "Extended Shadowline Trim Deletion": an option the owner ORDERED,
+    //    listed under Standard Features (next to its opposite) -> Added options.
+    //  - "Destination Charge": a mandatory fee on every car, listed under
+    //    Added options as if it were chosen -> Standard Features.
+    //  - "Head-up Display": an Executive Package item (per the configurator:
+    //    Galvanic controls + HUD + Full LED headlights), but the feed lists it
+    //    inside "Carbon Package Content" because Carbon requires Executive and
+    //    the dependency got flattened -> Executive Package.
+    // Pure copy — the cached detail is never mutated. An option whose target
+    // section doesn't exist in the payload stays where BMW put it.
+    const REFILE = {
+      'Extended Shadowline Trim Deletion': 'added options',
+      'Destination Charge': 'standard features',
+      'Head-up Display': 'executive package'
+    };
+    const sectionName = function (p) { return String(p.packageName || '').toLowerCase(); };
+    const movedByTarget = {};
+    for (let i = 0; i < packages.length; i++) {
+      const pkg = packages[i];
+      const opts = Array.isArray(pkg.options) ? pkg.options : [];
+      const keep = opts.filter(function (o) {
+        const s = typeof o === 'string' ? o : (o && o.name) || '';
+        const target = REFILE[s];
+        if (!target || target === sectionName(pkg)) return true; // not refiled, or already home
+        if (!packages.some(function (p2) { return sectionName(p2) === target; })) return true; // nowhere to go
+        (movedByTarget[target] = movedByTarget[target] || []).push(o);
+        return false;
+      });
+      if (keep.length !== opts.length) {
+        packages[i] = { packageName: pkg.packageName, price: pkg.price, options: keep };
+      }
+    }
+    for (let i = 0; i < packages.length; i++) {
+      const moved = movedByTarget[sectionName(packages[i])];
+      if (moved && moved.length) {
+        const pkg = packages[i];
+        packages[i] = {
+          packageName: pkg.packageName,
+          price: pkg.price,
+          options: (Array.isArray(pkg.options) ? pkg.options : []).concat(moved)
+        };
+      }
+    }
+
     const packagesHtml = packages.map(function (pkg) {
       const opts = Array.isArray(pkg.options) ? pkg.options : [];
       const isAdded = /added/i.test(pkg.packageName || '');

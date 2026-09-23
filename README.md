@@ -10,10 +10,10 @@ threads — digging through DevTools for the hidden response with your status co
 and options. This extension does all of that for you. One click, right on the
 page:
 
-![The Additional Vehicle Details panel for a 2027 M3 order at status 150: decoded status with a plain-language note, the current status message, the next milestone, the VIN with a link to BMW's official brochure, model and color codes with decoded paint/upholstery, and the priced option packages with the Carbon Package contents folded in](docs/panel.png)
+![The Additional Vehicle Details panel for a 2027 M3 order at status 193 (at the port): decoded status, the current status message, the next milestone, the VIN with links to BMW's official brochure and the owner's manual, model and color codes with decoded paint/upholstery, and the priced option packages with the Carbon Package contents folded in](docs/panel.png)
 
-*A real example (order at status 150 — production started) — every line is data
-BMW's page already downloaded but never shows you.*
+*A real example (order at status 193 — built and waiting at the port to ship) —
+every line is data BMW's page already downloaded but never shows you.*
 
 ## What you'll see
 

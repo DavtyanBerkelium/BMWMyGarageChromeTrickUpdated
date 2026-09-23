@@ -27,6 +27,9 @@ BMW's page already downloaded but never shows you.*
 - **View BMW brochure** — once your VIN exists, a one-click link to BMW's own
   official per-VIN digital brochure: a full spec sheet and image gallery of your
   exact build.
+- **Owner's manual** — later in the order (it showed up once the car reached the
+  port), BMW adds a link to the online owner's manual for your exact VIN; the panel
+  picks it up automatically.
 - **Your full build sheet** — every option package with its price and contents,
   the complete standard-features list, and your paint/interior with the short
   factory codes (the ones on the dealer's Vehicle Inquiry Report).
@@ -99,7 +102,7 @@ memory, never stored).
 Requires Chromium 111+ (static MAIN-world content scripts). After editing code:
 reload the extension on `chrome://extensions/`, then reload the BMW tab.
 
-Zero-dependency test suite (Node 20+): `npm test` — 46 tests covering the
+Zero-dependency test suite (Node 20+): `npm test` — 54 tests covering the
 capture hooks, panel rendering (including payload shapes taken from live
 captures), and manifest invariants.
 

@@ -362,3 +362,78 @@ test('fallback reports an expired session on HTTP 401', async () => {
   assert.equal(alerts.length, 1);
   assert.match(alerts[0], /session looks expired/i);
 });
+
+// --- Owner's manual link (core OWNERS_MANUAL rel, seen live at status 193) ---
+
+const MANUAL_HREF = 'https://bao.bmwgroup.com/bao-rd/manual/?locale=en_US&currentVin=WBS11111111111111';
+
+function capturedContext({ coreLinks, selectedExtra = {}, headers = { Authorization: 'Bearer t' } }) {
+  const target = makeElement('o-vehicle-details');
+  const fetches = [];
+  const ctx = makeContext({
+    alert: () => {},
+    document: makeDocument({ '.o-vehicle-details': target }),
+    fetch: (url) => {
+      fetches.push(url);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ links: coreLinks }) });
+    },
+  });
+  ctx.window.sessionStorage = makeStorage({
+    'selected-vehicle': JSON.stringify(Object.assign({ productionNumber: 'P100', vin: BASE_DETAIL.vin, gcid: 'g1' }, selectedExtra)),
+    'garage-vehicles': '[]',
+  });
+  ctx.__bmwCapture = { byProdNum: { P100: BASE_DETAIL }, headers };
+  return { ctx, target, fetches };
+}
+
+test('adds an Owner\'s manual link once core reports OWNERS_MANUAL', async () => {
+  const { ctx, target, fetches } = capturedContext({
+    coreLinks: [{ rel: 'TRACK', href: 'https://x/track' }, { rel: 'OWNERS_MANUAL', href: MANUAL_HREF }],
+  });
+  loadScript('execute.js', ctx);
+  assert.doesNotMatch(target.injected[0].html, /Owner's manual/, 'first render has no link yet');
+  await settle();
+  assert.equal(fetches.length, 1);
+  assert.match(fetches[0], /%2Fcore&/, 'fetches the core profile');
+  const last = target.injected[target.injected.length - 1].html;
+  assert.equal(target.injected.length, 2, 're-renders once with the link');
+  assert.match(last, /href="https:\/\/bao\.bmwgroup\.com\/bao-rd\/manual\/\?locale=en_US&amp;currentVin=WBS11111111111111"/);
+  assert.match(last, /target="_blank" rel="noopener noreferrer"[^>]*>Owner's manual/);
+});
+
+test('no manual link or re-render when core has no OWNERS_MANUAL', async () => {
+  const { ctx, target } = capturedContext({ coreLinks: [{ rel: 'TRACK', href: 'https://x/track' }] });
+  loadScript('execute.js', ctx);
+  await settle();
+  assert.equal(target.injected.length, 1);
+  assert.doesNotMatch(target.injected[0].html, /Owner's manual/);
+});
+
+test('ignores an OWNERS_MANUAL link that is not an https bmwgroup.com URL', async () => {
+  for (const href of ['http://bao.bmwgroup.com/m', 'https://evil.example/bmwgroup.com/', 'javascript:alert(1)', 'https://bmwgroup.com.evil.io/']) {
+    const { ctx, target } = capturedContext({ coreLinks: [{ rel: 'OWNERS_MANUAL', href }] });
+    loadScript('execute.js', ctx);
+    await settle();
+    assert.equal(target.injected.length, 1, `href ${href} must not trigger a re-render`);
+    assert.doesNotMatch(target.injected[0].html, /Owner's manual/);
+  }
+});
+
+test('uses an OWNERS_MANUAL link already present on selected-vehicle without a redundant re-render', async () => {
+  const { ctx, target } = capturedContext({
+    coreLinks: [{ rel: 'OWNERS_MANUAL', href: MANUAL_HREF }],
+    selectedExtra: { links: [{ rel: 'OWNERS_MANUAL', href: MANUAL_HREF }] },
+  });
+  loadScript('execute.js', ctx);
+  assert.match(target.injected[0].html, /Owner's manual/, 'shown on the first render');
+  await settle();
+  assert.equal(target.injected.length, 1, 'no redundant re-render');
+});
+
+test('skips the background core fetch without sniffed auth headers', async () => {
+  const { ctx, target, fetches } = capturedContext({ coreLinks: [], headers: null });
+  loadScript('execute.js', ctx);
+  await settle();
+  assert.equal(fetches.length, 0);
+  assert.equal(target.injected.length, 1);
+});

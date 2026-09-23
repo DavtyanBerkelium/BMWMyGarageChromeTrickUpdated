@@ -9,9 +9,14 @@ so it has no VIN, no production date, and no shipping data to build or verify ag
 - ~~**Deep-link to a VIN tool**~~ — DONE (2026-08-26): the VIN row links to BMW's own
   official per-VIN brochure (`https://eve.vsr.aws.bmw.cloud/brochure/<VIN>`, public, no
   login), gated on a real VIN. Verified live against the user's car.
+- ~~**Owner's manual link**~~ — DONE (2026-09-22): core's `OWNERS_MANUAL` rel (first seen
+  at status 193, absent at 153) is fetched in the background and shown next to the
+  brochure link; only https bmwgroup.com hrefs are trusted.
 - **Ship-tracking link** (deferred sub-item of the above). Hold until the car reaches a
   shipping status (~194/195) — and at that point also diff the TRACK payload for any new
   vessel/port fields, since BMW's feed grows new fields as the order matures.
+  Status 193 (2026-09-22): still no vessel fields; the user's ship (HARMONY LEADER, NYK,
+  IMO 9441568) came from outside the feed — use it to validate anything that shows up.
 
 ## Needs a live data sample to build correctly
 

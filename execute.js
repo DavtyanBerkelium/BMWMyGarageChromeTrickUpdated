@@ -85,6 +85,56 @@
 
   const prodNum = String(selected.productionNumber);
 
+  // Copy of the sniffed auth headers for a replayed API call, or null when the
+  // page hasn't made an authorized request yet (the proxy 500s without them).
+  function authHeaders() {
+    if (!cap.headers || !(cap.headers.Authorization || cap.headers.authorization)) return null;
+    const h = {};
+    Object.keys(cap.headers).forEach(function (k) { h[k] = cap.headers[k]; });
+    if (!h.Accept && !h.accept) h.Accept = 'application/json';
+    return h;
+  }
+
+  const coreRel = selected.relationshipType || 'TRACK';
+  const coreUrl = '/bin/my-garage-services/forward'
+    + '?target=' + encodeURIComponent('/<brand-market>/profile/' + prodNum + '-' + (selected.vin || 'null') + '/core')
+    + '&brand=BMW'
+    + '&gcid=' + encodeURIComponent(selected.gcid || '')
+    + '&relationships=' + encodeURIComponent(coreRel)
+    + '&market=US';
+
+  // BMW's VIN-specific online owner's manual. The core profile gains an
+  // OWNERS_MANUAL link late in the order (seen live at 193, absent at 153);
+  // only an https bmwgroup.com target is trusted into the panel.
+  function manualHref(links) {
+    if (!Array.isArray(links)) return '';
+    const link = links.find(function (l) { return l && l.rel === 'OWNERS_MANUAL'; });
+    const href = link && typeof link.href === 'string' ? link.href : '';
+    return /^https:\/\/([a-z0-9-]+\.)*bmwgroup\.com\//i.test(href) ? href : '';
+  }
+
+  function currentManualHref() {
+    return manualHref(cap.coreLinks && cap.coreLinks[prodNum]) || manualHref(selected.links);
+  }
+
+  // The captured TRACK payload doesn't carry core's links, so fetch core once
+  // in the background and re-render if it turns out to have a manual link.
+  function loadCoreLinks(detail) {
+    if (cap.coreLinks && cap.coreLinks[prodNum]) return;
+    const h = authHeaders();
+    if (!h) return;
+    const hadManual = !!currentManualHref();
+    fetch(coreUrl, { credentials: 'include', headers: h })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (core) {
+        if (!core || !Array.isArray(core.links)) return;
+        cap.coreLinks = cap.coreLinks || {};
+        cap.coreLinks[prodNum] = core.links;
+        if (!hadManual && manualHref(core.links)) renderDetail(detail);
+      })
+      .catch(function (e) { console.debug('BMW MyGarage Trick: core links unavailable', e); });
+  }
+
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return HTML_ESCAPES[c]; });
   }
@@ -167,6 +217,7 @@
     // BMW's official per-VIN digital brochure (public, no login) — a full spec
     // sheet + gallery of the exact build. Only meaningful once a real VIN exists.
     const brochureUrl = vinIsReal ? 'https://eve.vsr.aws.bmw.cloud/brochure/' + encodeURIComponent(detail.vin) : '';
+    const manualUrl = currentManualHref();
     // Production Date and Retail Date rows are hidden for now: BMW's feed doesn't
     // reliably populate prodDate/retlDate at a status we've pinned down (both were
     // still "null" at 150), so they're suppressed until the real reveal is known.
@@ -334,7 +385,8 @@
         '<p style="margin:6px 0;"><strong>Status:</strong> ' + statusDesc + (statusDescLong ? '<br><span style="color:#555;">' + statusDescLong + '</span>' : '') + '</p>' +
         (nextName ? '<p style="margin:6px 0;"><strong>Next:</strong> ' + escapeHtml(nextName) + '</p>' : '') +
         '<p style="margin:6px 0;"><strong>VIN:</strong> ' + vinShown +
-          (brochureUrl ? ' <a href="' + escapeHtml(brochureUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">View BMW brochure ↗</a>' : '') + '</p>' +
+          (brochureUrl ? ' <a href="' + escapeHtml(brochureUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">View BMW brochure ↗</a>' : '') +
+          (manualUrl ? ' <a href="' + escapeHtml(manualUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">Owner\'s manual ↗</a>' : '') + '</p>' +
         (modelYear || naModel ? '<p style="margin:6px 0;"><strong>Model:</strong> ' + modelYear + ' ' + naModel + modelCodes + '</p>' : '') +
         (exterior ? '<p style="margin:6px 0;"><strong>Exterior:</strong> ' + exterior + (colorCode ? ' <span style="color:#666;">(' + colorCode + ')</span>' : '') + '</p>' : '') +
         (interior ? '<p style="margin:6px 0;"><strong>Interior:</strong> ' + interior + (upholsteryCode ? ' <span style="color:#666;">(' + upholsteryCode + ')</span>' : '') + '</p>' : '') +
@@ -373,33 +425,22 @@
   }
 
   const have = cap.byProdNum[prodNum];
-  if (have && have.packageDetails) { renderDetail(have); return; }
+  if (have && have.packageDetails) { renderDetail(have); loadCoreLinks(have); return; }
 
   // No capture yet — try fetching directly using the auth headers we sniffed.
-  if (!cap.headers || !(cap.headers.Authorization || cap.headers.authorization)) {
+  const headers = authHeaders();
+  if (!headers) {
     alert('BMW MyGarage Trick: vehicle details not yet loaded. Click the vehicle tab in the top bar (or refresh the page) and try again.');
     return;
   }
 
-  const headers = {};
-  Object.keys(cap.headers).forEach(function (k) { headers[k] = cap.headers[k]; });
-  if (!headers.Accept && !headers.accept) headers.Accept = 'application/json';
-
-  const vinPart = selected.vin || 'null';
-  const rel = selected.relationshipType || 'TRACK';
-  const target = '/<brand-market>/profile/' + prodNum + '-' + vinPart + '/core';
-  const url = '/bin/my-garage-services/forward'
-    + '?target=' + encodeURIComponent(target)
-    + '&brand=BMW'
-    + '&gcid=' + encodeURIComponent(selected.gcid || '')
-    + '&relationships=' + encodeURIComponent(rel)
-    + '&market=US';
-
-  fetch(url, { credentials: 'include', headers: headers })
+  fetch(coreUrl, { credentials: 'include', headers: headers })
     .then(function (r) { if (!r.ok) throw new Error('HTTP_' + r.status); return r.json(); })
     .then(function (core) {
       if (!core || !Array.isArray(core.links)) throw new Error('NO_LINKS');
-      const trackLink = core.links.find(function (l) { return l.rel === rel; })
+      cap.coreLinks = cap.coreLinks || {};
+      cap.coreLinks[prodNum] = core.links;
+      const trackLink = core.links.find(function (l) { return l.rel === coreRel; })
         || core.links.find(function (l) { return l.rel === 'FEATURES_AND_OPTIONS'; });
       if (!trackLink) throw new Error('NO_REL');
       const path = trackLink.href.replace(/^https?:\/\/[^/]+/, '');

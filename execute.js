@@ -113,24 +113,27 @@
     return /^https:\/\/([a-z0-9-]+\.)*bmwgroup\.com\//i.test(href) ? href : '';
   }
 
-  function currentManualHref() {
-    return manualHref(cap.coreLinks && cap.coreLinks[prodNum]) || manualHref(selected.links);
+  function manualLinkHtml(href) {
+    return ' <a href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">Owner\'s manual ↗</a>';
   }
 
   // The captured TRACK payload doesn't carry core's links, so fetch core once
-  // in the background and re-render if it turns out to have a manual link.
-  function loadCoreLinks(detail) {
+  // in the background. A manual link that turns up is slotted into the open
+  // panel's VIN row in place — core can take seconds (6.6s seen live), and a
+  // full re-render would tear down anything the user has opened meanwhile.
+  function loadCoreLinks() {
     if (cap.coreLinks && cap.coreLinks[prodNum]) return;
     const h = authHeaders();
     if (!h) return;
-    const hadManual = !!currentManualHref();
     fetch(coreUrl, { credentials: 'include', headers: h })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (core) {
         if (!core || !Array.isArray(core.links)) return;
         cap.coreLinks = cap.coreLinks || {};
         cap.coreLinks[prodNum] = core.links;
-        if (!hadManual && manualHref(core.links)) renderDetail(detail);
+        const href = manualHref(core.links);
+        const slot = href ? document.querySelector('.c-custom-details .c-cd-vin-links') : null;
+        if (slot) slot.insertAdjacentHTML('beforeend', manualLinkHtml(href));
       })
       .catch(function (e) { console.debug('BMW MyGarage Trick: core links unavailable', e); });
   }
@@ -168,24 +171,22 @@
     });
   }
 
-  function loadSpin(box, cap, selected, prodNum) {
-    box.innerHTML = '<p style="margin:8px 0;color:#777;">Loading 360° view…</p>';
-    const cached = cap.spinFrames && cap.spinFrames[prodNum];
-    if (cached) { buildSpinViewer(box, cached); return; }
-    if (!cap.headers || !(cap.headers.Authorization || cap.headers.authorization)) {
-      box.innerHTML = '<p style="margin:8px 0;color:#777;">The 360° view needs the page session — reload the page and try again.</p>';
-      return;
-    }
-    const h = {};
-    Object.keys(cap.headers).forEach(function (k) { h[k] = cap.headers[k]; });
-    if (!h.Accept && !h.accept) h.Accept = 'application/json';
-    const vinPart = selected.vin || 'null';
+  // BMW's frame-list endpoint can be very slow on a cold request (13.8s seen
+  // live 2026-09-22; ~0.5s warm), so the list is prefetched when the panel
+  // renders. One shared request per car (kept on cap, which outlives each
+  // toolbar click) means a prefetch and a click never double up.
+  function fetchSpinFrames() {
+    if (cap.spinFrames && cap.spinFrames[prodNum]) return Promise.resolve(cap.spinFrames[prodNum]);
+    cap.spinPending = cap.spinPending || {};
+    if (cap.spinPending[prodNum]) return cap.spinPending[prodNum];
+    const h = authHeaders();
+    if (!h) return Promise.reject(new Error('NO_AUTH'));
     const url = '/bin/my-garage-services/forward'
-      + '?target=' + encodeURIComponent('/<brand-market>/profile/' + prodNum + '-' + vinPart + '/features-and-options/images')
+      + '?target=' + encodeURIComponent('/<brand-market>/profile/' + prodNum + '-' + (selected.vin || 'null') + '/features-and-options/images')
       + '&brand=BMW'
       + '&gcid=' + encodeURIComponent(selected.gcid || '')
       + '&startAngle=0&stepAngle=10&market=US';
-    fetch(url, { credentials: 'include', headers: h })
+    const pending = fetch(url, { credentials: 'include', headers: h })
       .then(function (r) { if (!r.ok) throw new Error('HTTP_' + r.status); return r.json(); })
       .then(function (data) {
         const frames = data && Array.isArray(data.content)
@@ -195,11 +196,43 @@
         frames.sort(function (a, b) { return (a.angle || 0) - (b.angle || 0); });
         cap.spinFrames = cap.spinFrames || {};
         cap.spinFrames[prodNum] = frames;
-        buildSpinViewer(box, frames);
+        delete cap.spinPending[prodNum];
+        return frames;
+      }, function (e) {
+        delete cap.spinPending[prodNum]; // let a later click retry
+        throw e;
+      });
+    cap.spinPending[prodNum] = pending;
+    return pending;
+  }
+
+  // Background warm-up: fetch the frame list and the first frame so the
+  // viewer opens instantly. Failures stay quiet; a click retries and reports.
+  function prefetchSpin() {
+    fetchSpinFrames()
+      .then(function (frames) {
+        if (typeof Image === 'function') { const im = new Image(); im.src = frames[0].url; }
       })
+      .catch(function (e) { console.debug('BMW MyGarage Trick: 360° prefetch failed', e); });
+  }
+
+  function loadSpin(box) {
+    box.innerHTML = '<p style="margin:8px 0;color:#777;">Loading 360° view…</p>';
+    const slowNote = setTimeout(function () {
+      if (!box.querySelector('img')) {
+        box.innerHTML = '<p style="margin:8px 0;color:#777;">Still loading — BMW\'s image server can take several seconds the first time…</p>';
+      }
+    }, 3000);
+    fetchSpinFrames()
+      .then(function (frames) { clearTimeout(slowNote); buildSpinViewer(box, frames); })
       .catch(function (e) {
-        console.error('BMW MyGarage Trick: 360° load failed', e);
+        clearTimeout(slowNote);
         const msg = String((e && e.message) || '');
+        if (msg === 'NO_AUTH') {
+          box.innerHTML = '<p style="margin:8px 0;color:#777;">The 360° view needs the page session — reload the page and try again.</p>';
+          return;
+        }
+        console.error('BMW MyGarage Trick: 360° load failed', e);
         box.innerHTML = '<p style="margin:8px 0;color:#777;">Could not load the 360° view'
           + (/^HTTP_4/.test(msg) ? ' — session may have expired; reload the page and try again.' : '.') + '</p>';
       });
@@ -217,7 +250,7 @@
     // BMW's official per-VIN digital brochure (public, no login) — a full spec
     // sheet + gallery of the exact build. Only meaningful once a real VIN exists.
     const brochureUrl = vinIsReal ? 'https://eve.vsr.aws.bmw.cloud/brochure/' + encodeURIComponent(detail.vin) : '';
-    const manualUrl = currentManualHref();
+    const manualUrl = manualHref(cap.coreLinks && cap.coreLinks[prodNum]);
     // Production Date and Retail Date rows are hidden for now: BMW's feed doesn't
     // reliably populate prodDate/retlDate at a status we've pinned down (both were
     // still "null" at 150), so they're suppressed until the real reveal is known.
@@ -385,8 +418,10 @@
         '<p style="margin:6px 0;"><strong>Status:</strong> ' + statusDesc + (statusDescLong ? '<br><span style="color:#555;">' + statusDescLong + '</span>' : '') + '</p>' +
         (nextName ? '<p style="margin:6px 0;"><strong>Next:</strong> ' + escapeHtml(nextName) + '</p>' : '') +
         '<p style="margin:6px 0;"><strong>VIN:</strong> ' + vinShown +
-          (brochureUrl ? ' <a href="' + escapeHtml(brochureUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">View BMW brochure ↗</a>' : '') +
-          (manualUrl ? ' <a href="' + escapeHtml(manualUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">Owner\'s manual ↗</a>' : '') + '</p>' +
+          '<span class="c-cd-vin-links">' +
+            (brochureUrl ? ' <a href="' + escapeHtml(brochureUrl) + '" target="_blank" rel="noopener noreferrer" style="margin-left:8px;font-size:.85rem;color:#0066b1;text-decoration:none;white-space:nowrap;">View BMW brochure ↗</a>' : '') +
+            (manualUrl ? manualLinkHtml(manualUrl) : '') +
+          '</span></p>' +
         (modelYear || naModel ? '<p style="margin:6px 0;"><strong>Model:</strong> ' + modelYear + ' ' + naModel + modelCodes + '</p>' : '') +
         (exterior ? '<p style="margin:6px 0;"><strong>Exterior:</strong> ' + exterior + (colorCode ? ' <span style="color:#666;">(' + colorCode + ')</span>' : '') + '</p>' : '') +
         (interior ? '<p style="margin:6px 0;"><strong>Interior:</strong> ' + interior + (upholsteryCode ? ' <span style="color:#666;">(' + upholsteryCode + ')</span>' : '') + '</p>' : '') +
@@ -419,13 +454,15 @@
         }
         spinBox.style.display = 'block';
         spinBtn.innerHTML = 'Hide 360&deg;';
-        if (!spinBox.__loaded) { spinBox.__loaded = true; loadSpin(spinBox, cap, selected, prodNum); }
+        if (!spinBox.__loaded) { spinBox.__loaded = true; loadSpin(spinBox); }
       });
     } catch (_) {}
+
+    prefetchSpin();
   }
 
   const have = cap.byProdNum[prodNum];
-  if (have && have.packageDetails) { renderDetail(have); loadCoreLinks(have); return; }
+  if (have && have.packageDetails) { renderDetail(have); loadCoreLinks(); return; }
 
   // No capture yet — try fetching directly using the auth headers we sniffed.
   const headers = authHeaders();

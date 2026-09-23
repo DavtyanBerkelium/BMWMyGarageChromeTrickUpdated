@@ -102,7 +102,7 @@ memory, never stored).
 Requires Chromium 111+ (static MAIN-world content scripts). After editing code:
 reload the extension on `chrome://extensions/`, then reload the BMW tab.
 
-Zero-dependency test suite (Node 20+): `npm test` — 54 tests covering the
+Zero-dependency test suite (Node 20+): `npm test` — 57 tests covering the
 capture hooks, panel rendering (including payload shapes taken from live
 captures), and manifest invariants.
 

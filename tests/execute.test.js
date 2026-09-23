@@ -367,73 +367,140 @@ test('fallback reports an expired session on HTTP 401', async () => {
 
 const MANUAL_HREF = 'https://bao.bmwgroup.com/bao-rd/manual/?locale=en_US&currentVin=WBS11111111111111';
 
-function capturedContext({ coreLinks, selectedExtra = {}, headers = { Authorization: 'Bearer t' } }) {
+function capturedContext({ coreLinks, headers = { Authorization: 'Bearer t' }, cachedCoreLinks }) {
   const target = makeElement('o-vehicle-details');
+  const slot = makeElement('c-cd-vin-links');
   const fetches = [];
   const ctx = makeContext({
     alert: () => {},
-    document: makeDocument({ '.o-vehicle-details': target }),
+    document: makeDocument({ '.o-vehicle-details': target, '.c-custom-details .c-cd-vin-links': slot }),
     fetch: (url) => {
       fetches.push(url);
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ links: coreLinks }) });
     },
   });
   ctx.window.sessionStorage = makeStorage({
-    'selected-vehicle': JSON.stringify(Object.assign({ productionNumber: 'P100', vin: BASE_DETAIL.vin, gcid: 'g1' }, selectedExtra)),
+    'selected-vehicle': JSON.stringify({ productionNumber: 'P100', vin: BASE_DETAIL.vin, gcid: 'g1' }),
     'garage-vehicles': '[]',
   });
   ctx.__bmwCapture = { byProdNum: { P100: BASE_DETAIL }, headers };
-  return { ctx, target, fetches };
+  if (cachedCoreLinks) ctx.__bmwCapture.coreLinks = { P100: cachedCoreLinks };
+  const coreFetches = () => fetches.filter((u) => /%2Fcore&/.test(u));
+  return { ctx, target, slot, coreFetches };
 }
 
-test('adds an Owner\'s manual link once core reports OWNERS_MANUAL', async () => {
-  const { ctx, target, fetches } = capturedContext({
+test('slots an Owner\'s manual link into the open panel once core reports OWNERS_MANUAL — no re-render', async () => {
+  const { ctx, target, slot, coreFetches } = capturedContext({
     coreLinks: [{ rel: 'TRACK', href: 'https://x/track' }, { rel: 'OWNERS_MANUAL', href: MANUAL_HREF }],
   });
   loadScript('execute.js', ctx);
+  assert.match(target.injected[0].html, /class="c-cd-vin-links"/, 'VIN row carries the link slot');
   assert.doesNotMatch(target.injected[0].html, /Owner's manual/, 'first render has no link yet');
   await settle();
-  assert.equal(fetches.length, 1);
-  assert.match(fetches[0], /%2Fcore&/, 'fetches the core profile');
-  const last = target.injected[target.injected.length - 1].html;
-  assert.equal(target.injected.length, 2, 're-renders once with the link');
-  assert.match(last, /href="https:\/\/bao\.bmwgroup\.com\/bao-rd\/manual\/\?locale=en_US&amp;currentVin=WBS11111111111111"/);
-  assert.match(last, /target="_blank" rel="noopener noreferrer"[^>]*>Owner's manual/);
+  assert.equal(coreFetches().length, 1, 'fetches the core profile once');
+  assert.equal(target.injected.length, 1, 'the panel is never re-rendered (would close an open 360 viewer)');
+  assert.equal(slot.injected.length, 1);
+  assert.equal(slot.injected[0].position, 'beforeend');
+  assert.match(slot.injected[0].html, /href="https:\/\/bao\.bmwgroup\.com\/bao-rd\/manual\/\?locale=en_US&amp;currentVin=WBS11111111111111"/);
+  assert.match(slot.injected[0].html, /target="_blank" rel="noopener noreferrer"[^>]*>Owner's manual/);
 });
 
-test('no manual link or re-render when core has no OWNERS_MANUAL', async () => {
-  const { ctx, target } = capturedContext({ coreLinks: [{ rel: 'TRACK', href: 'https://x/track' }] });
+test('renders the manual link directly when core links are already cached (reopened panel)', async () => {
+  const { ctx, target, slot, coreFetches } = capturedContext({
+    coreLinks: [],
+    cachedCoreLinks: [{ rel: 'OWNERS_MANUAL', href: MANUAL_HREF }],
+  });
+  loadScript('execute.js', ctx);
+  assert.match(target.injected[0].html, /Owner's manual/);
+  await settle();
+  assert.equal(coreFetches().length, 0, 'no refetch');
+  assert.equal(slot.injected.length, 0, 'not added twice');
+});
+
+test('no manual link when core has no OWNERS_MANUAL', async () => {
+  const { ctx, target, slot } = capturedContext({ coreLinks: [{ rel: 'TRACK', href: 'https://x/track' }] });
   loadScript('execute.js', ctx);
   await settle();
-  assert.equal(target.injected.length, 1);
   assert.doesNotMatch(target.injected[0].html, /Owner's manual/);
+  assert.equal(slot.injected.length, 0);
 });
 
 test('ignores an OWNERS_MANUAL link that is not an https bmwgroup.com URL', async () => {
   for (const href of ['http://bao.bmwgroup.com/m', 'https://evil.example/bmwgroup.com/', 'javascript:alert(1)', 'https://bmwgroup.com.evil.io/']) {
-    const { ctx, target } = capturedContext({ coreLinks: [{ rel: 'OWNERS_MANUAL', href }] });
+    const { ctx, slot } = capturedContext({ coreLinks: [{ rel: 'OWNERS_MANUAL', href }] });
     loadScript('execute.js', ctx);
     await settle();
-    assert.equal(target.injected.length, 1, `href ${href} must not trigger a re-render`);
-    assert.doesNotMatch(target.injected[0].html, /Owner's manual/);
+    assert.equal(slot.injected.length, 0, `href ${href} must not be linked`);
   }
 });
 
-test('uses an OWNERS_MANUAL link already present on selected-vehicle without a redundant re-render', async () => {
-  const { ctx, target } = capturedContext({
-    coreLinks: [{ rel: 'OWNERS_MANUAL', href: MANUAL_HREF }],
-    selectedExtra: { links: [{ rel: 'OWNERS_MANUAL', href: MANUAL_HREF }] },
-  });
+test('skips the background core fetch without sniffed auth headers', async () => {
+  const { ctx, target, coreFetches } = capturedContext({ coreLinks: [], headers: null });
   loadScript('execute.js', ctx);
-  assert.match(target.injected[0].html, /Owner's manual/, 'shown on the first render');
   await settle();
-  assert.equal(target.injected.length, 1, 'no redundant re-render');
+  assert.equal(coreFetches().length, 0);
+  assert.equal(target.injected.length, 1);
 });
 
-test('skips the background core fetch without sniffed auth headers', async () => {
-  const { ctx, target, fetches } = capturedContext({ coreLinks: [], headers: null });
+// --- 360° frame-list prefetch (BMW's endpoint took 13.8s cold, live 2026-09-22) ---
+
+function spinContext(imagesResponses) {
+  const target = makeElement('o-vehicle-details');
+  const fetches = [];
+  let imgCall = 0;
+  const ctx = makeContext({
+    alert: () => {},
+    document: makeDocument({ '.o-vehicle-details': target }),
+    fetch: (url) => {
+      fetches.push(url);
+      if (/images&/.test(url)) {
+        const r = imagesResponses[Math.min(imgCall++, imagesResponses.length - 1)];
+        return Promise.resolve(r);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ links: [] }) });
+    },
+  });
+  ctx.window.sessionStorage = makeStorage({
+    'selected-vehicle': JSON.stringify({ productionNumber: 'P100', vin: BASE_DETAIL.vin, gcid: 'g1' }),
+    'garage-vehicles': '[]',
+  });
+  ctx.__bmwCapture = { byProdNum: { P100: BASE_DETAIL }, headers: { Authorization: 'Bearer t' } };
+  const imageFetches = () => fetches.filter((u) => /features-and-options%2Fimages/.test(u));
+  return { ctx, target, imageFetches };
+}
+
+const FRAMES_OK = {
+  ok: true,
+  json: () => Promise.resolve({ content: [{ angle: 10, url: 'https://cosy/b' }, { angle: 0, url: 'https://cosy/a' }] }),
+};
+
+test('prefetches the 360 frame list when the panel renders, sorted and cached', async () => {
+  const { ctx, imageFetches } = spinContext([FRAMES_OK]);
   loadScript('execute.js', ctx);
   await settle();
-  assert.equal(fetches.length, 0);
-  assert.equal(target.injected.length, 1);
+  assert.equal(imageFetches().length, 1);
+  assert.match(imageFetches()[0], /startAngle=0&stepAngle=10/);
+  const frames = ctx.__bmwCapture.spinFrames.P100;
+  assert.deepEqual(Array.from(frames, (f) => f.angle), [0, 10]);
+});
+
+test('shares one in-flight frame request across panel opens, then reuses the cache', async () => {
+  const { ctx, imageFetches } = spinContext([FRAMES_OK]);
+  loadScript('execute.js', ctx);
+  loadScript('execute.js', ctx); // second toolbar click while the first request is in flight
+  await settle();
+  loadScript('execute.js', ctx); // later click: served from cache
+  await settle();
+  assert.equal(imageFetches().length, 1);
+});
+
+test('a failed prefetch is not cached, so a later open retries', async () => {
+  const { ctx, imageFetches } = spinContext([{ ok: false, status: 500, json: () => Promise.resolve(null) }, FRAMES_OK]);
+  loadScript('execute.js', ctx);
+  await settle();
+  assert.ok(!ctx.__bmwCapture.spinFrames, 'nothing cached after a failure');
+  loadScript('execute.js', ctx);
+  await settle();
+  assert.equal(imageFetches().length, 2);
+  assert.equal(ctx.__bmwCapture.spinFrames.P100.length, 2);
 });

@@ -336,6 +336,23 @@ test('fallback fetches via sniffed headers and renders the panel', async () => {
   assert.match(target.injected[0].html, /Additional Vehicle Details/);
 });
 
+test('fallback accepts BMW\'s `translate` auth header and replays the full header set', async () => {
+  const detail = Object.assign({}, BASE_DETAIL, { prodNum: 'P200' });
+  const { ctx, target, alerts } = fallbackContext([
+    { ok: true, json: () => Promise.resolve({ links: [{ rel: 'TRACK', href: 'https://api.bmw/track?x=1' }] }) },
+    { ok: true, json: () => Promise.resolve({ dataContent: { prodVehicleDetails: [detail] } }) },
+  ], { headers: { translate: 'token=t', From: 'g' } });
+  const seen = [];
+  const inner = ctx.fetch;
+  ctx.fetch = (url, init) => { seen.push(init && init.headers); return inner(url, init); };
+  loadScript('execute.js', ctx);
+  await settle();
+  assert.equal(alerts.length, 0);
+  assert.ok(target.injected.length > 0, 'panel renders');
+  assert.equal(seen[0].translate, 'token=t');
+  assert.equal(seen[0].From, 'g');
+});
+
 test('fallback without sniffed auth headers alerts to load the data', () => {
   const { ctx, alerts } = fallbackContext([], { headers: null });
   loadScript('execute.js', ctx);

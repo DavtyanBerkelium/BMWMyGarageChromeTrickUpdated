@@ -86,9 +86,11 @@
   const prodNum = String(selected.productionNumber);
 
   // Copy of the sniffed auth headers for a replayed API call, or null when the
-  // page hasn't made an authorized request yet (the proxy 500s without them).
+  // page hasn't made an authorized request yet (the proxy rejects the call
+  // without them). Matches before.js: BMW moved the token from `Authorization`
+  // to a `translate` header in ~Sep 2026.
   function authHeaders() {
-    if (!cap.headers || !(cap.headers.Authorization || cap.headers.authorization)) return null;
+    if (!cap.headers || !Object.keys(cap.headers).some(function (k) { return /^(authorization|translate)$/i.test(k); })) return null;
     const h = {};
     Object.keys(cap.headers).forEach(function (k) { h[k] = cap.headers[k]; });
     if (!h.Accept && !h.accept) h.Accept = 'application/json';

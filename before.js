@@ -10,6 +10,11 @@
     headers: null
   };
 
+  // Headers that carry the user's login on BMW's API proxy. It used to be a
+  // standard `Authorization: Bearer …`; since ~Sep 2026 BMW's axios interceptor
+  // sends the token in a `translate` header (alongside `From`) instead.
+  const AUTH_HEADER = /^(authorization|translate)$/i;
+
   function ingest(text) {
     if (!text || typeof text !== 'string') return;
     // Cheap pre-filter: any body that parses to an object carrying
@@ -34,24 +39,24 @@
   }
 
   // Normalize a Headers | [[k,v]] | {k:v} header source; if it carries an
-  // Authorization header, record the whole set for execute.js's fallback fetch.
+  // auth header, record the whole set for execute.js's fallback fetch.
   function captureAuthHeaders(headerSource) {
     if (!headerSource) return;
     const collected = {};
     let auth = null;
     try {
       if (typeof Headers !== 'undefined' && headerSource instanceof Headers) {
-        headerSource.forEach(function (v, k) { collected[k] = v; if (/^authorization$/i.test(k)) auth = v; });
+        headerSource.forEach(function (v, k) { collected[k] = v; if (AUTH_HEADER.test(k)) auth = v; });
       } else if (Array.isArray(headerSource)) {
         headerSource.forEach(function (pair) {
           if (!pair) return;
           collected[pair[0]] = pair[1];
-          if (/^authorization$/i.test(pair[0])) auth = pair[1];
+          if (AUTH_HEADER.test(pair[0])) auth = pair[1];
         });
       } else if (typeof headerSource === 'object') {
         Object.keys(headerSource).forEach(function (k) {
           collected[k] = headerSource[k];
-          if (/^authorization$/i.test(k)) auth = headerSource[k];
+          if (AUTH_HEADER.test(k)) auth = headerSource[k];
         });
       }
     } catch (_) { return; }
@@ -105,7 +110,7 @@
         xhr.__bmwBound = true;
         xhr.addEventListener('load', function () {
           if (xhr.status < 200 || xhr.status >= 300) return;
-          if (xhr.__bmwHeaders && (xhr.__bmwHeaders.Authorization || xhr.__bmwHeaders.authorization)) {
+          if (xhr.__bmwHeaders && Object.keys(xhr.__bmwHeaders).some(function (k) { return AUTH_HEADER.test(k); })) {
             cap.headers = xhr.__bmwHeaders;
           }
           try { ingest(xhr.responseText); } catch (_) {}

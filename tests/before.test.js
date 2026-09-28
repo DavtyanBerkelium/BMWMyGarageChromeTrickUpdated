@@ -92,6 +92,45 @@ test('XHR hook captures Authorization headers and ingests body', async () => {
   assert.ok(ctx.__bmwCapture.byProdNum.P123, 'XHR body should also be ingested');
 });
 
+test('XHR hook captures BMW\'s `translate` auth header (the Sep 2026 replacement for Authorization)', async () => {
+  const ctx = ctxWithFetch(() => Promise.resolve(makeResponse(DETAIL_JSON)));
+  loadScript('before.js', ctx);
+  const xhr = new ctx.XMLHttpRequest();
+  xhr.open('GET', '/core');
+  xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
+  xhr.setRequestHeader('translate', 'gcid=g,groupId=x,token=t,email=e,brand=BMW,type=TRACK');
+  xhr.setRequestHeader('From', 'g,no-group-id,en');
+  xhr.send();
+  xhr.status = 200;
+  xhr.responseText = '{}';
+  xhr._fire('load');
+  await flush();
+  assert.ok(ctx.__bmwCapture.headers, 'headers should be captured');
+  assert.deepStrictEqual(Object.keys(ctx.__bmwCapture.headers), ['Accept', 'translate', 'From'], 'the full set is kept for replay');
+});
+
+test('XHR hook ignores requests with no auth header', async () => {
+  const ctx = ctxWithFetch(() => Promise.resolve(makeResponse(DETAIL_JSON)));
+  loadScript('before.js', ctx);
+  const xhr = new ctx.XMLHttpRequest();
+  xhr.open('GET', '/env-config');
+  xhr.setRequestHeader('Accept', 'application/json');
+  xhr.send();
+  xhr.status = 200;
+  xhr.responseText = '{}';
+  xhr._fire('load');
+  await flush();
+  assert.strictEqual(ctx.__bmwCapture.headers, null);
+});
+
+test('fetch hook captures a `translate` auth header from init.headers', async () => {
+  const ctx = ctxWithFetch(() => Promise.resolve(makeResponse('{}')));
+  loadScript('before.js', ctx);
+  await ctx.window.fetch('/core', { headers: { translate: 'token=t', From: 'g' } });
+  await flush();
+  assert.strictEqual(ctx.__bmwCapture.headers.translate, 'token=t');
+});
+
 test('XHR hook ignores non-2xx responses', async () => {
   const ctx = ctxWithFetch(() => Promise.resolve(makeResponse(DETAIL_JSON)));
   loadScript('before.js', ctx);
